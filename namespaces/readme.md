@@ -1,9 +1,9 @@
 # Reference
-[md syntax](https://help.github.com/articles/basic-writing-and-formatting-syntax/)
-[Namespace overview](http://man7.org/linux/man-pages/man7/namespaces.7.html)
+- [md syntax](https://help.github.com/articles/basic-writing-and-formatting-syntax/)
+- [Namespace overview](http://man7.org/linux/man-pages/man7/namespaces.7.html)
 
 # Update to new kernel (that supports user namespace) 
-(https://wiki.mikejung.biz/CentOS_7#Upgrade_CentOS_7_Kernel_to_3.17)
+https://wiki.mikejung.biz/CentOS_7#Upgrade_CentOS_7_Kernel_to_3.17
 
 # Check run-time environment
 ```
@@ -118,7 +118,7 @@ uts:[4026531838]
 ```
 
 ## Bind mount a directory in the child namespaces is not visiable in the parent namespace
-## [Good article on bind mount use cases](https://unix.stackexchange.com/questions/198590/what-is-a-bind-mount) 
+- [Good article on bind mount use cases](https://unix.stackexchange.com/questions/198590/what-is-a-bind-mount) 
 ### In child namespace
 ```
 [root@localhost home]# mount --bind /home/kenny/ /root
