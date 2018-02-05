@@ -2,6 +2,7 @@
 http://securitynik.blogspot.ca/2016/12/docker-networking-internals-container.html
 [Docker load balancing](https://www.youtube.com/watch?v=nXaF2d97JnE)
 https://neuvector.com/blog/docker-swarm-container-networking/
+https://github.com/docker/libnetwork
 
 # Start docker daemon and clean up old swarm
 Start docker daemon and find swarm nodes
@@ -698,53 +699,56 @@ The my-overlay-network network,
 
 ```
 
-
-
+                                                                                                                                    .
+                                                                                                                                    .
  ------------------------+--------------------------------------------- FIOS router 192.168.1.1/24 -----------------------------------------------------------------------------
-                         |                                                                                                                      |
-                         |                                                                                                          :           | 
-                         |2: eno16777736 192.168.1.16                                                                               :           | 2: eno16777736 192.168.1.18 
-                   +-----------+                                                                                                    :       +-----------+   
-                   |  host-6   |                                                                                                    :       |  host-7   | 
-                   +-----------+                                                                                                    :       +-----------+
-                                                          |                                                                         :
-                                                          |                                                                         : 
-                                                          |12: vxlan0                                                               : 
- -----------------------+-------------------------------------------------- ingress 2: br0 10.255.0.1/16 (ns 1-j12a5pxum5)          :
-                |18: veth1@if17 |14: veth0@if13                                                                                     :
-                |               |                                                                                                   :
-                |               |13: eth0@if14 10.255.0.2                                                                           : 
-                |           +----------------------+                                                                                :    
-                |           | ingress-sbox         |                                                                                :      
-                |           +----------------------+                                                                                :     
-                |               | 15: eth1@if16 172.18.0.2                                                                          :
-                |               |                                                                                                   :
-                |               |                                                                                                   :
-                |               | 16: veth812d9da@if15                                                                              : 
-                |            ---+---------------+--------------------------- 4: docker_gwbridge network 172.18.1.1/16 (default ns)  :   ----------- 3: docker_gwbridge 172.18.0.1/16 
-                |                               |20: vethb08ef80@if19                                                               :         |20: veth0e0a2df@if19 
-                |                               |                                                                                   :         | 
-                |                               |                                                                                   :         | 
-                |                               |                                                                                   :         | 
-                |17: eth0@if18 10.255.0.5/16    |19: eth1@if20 172.18.0.3                                                           :         |19: eth1@if20 172.18.0.3 
-              +-----------------------------------+                                                                                 :      +--------------------------------+ 
-              |  nginx                            |                                                                                 :      | node                           | 
-              +-----------------------------------+                                                                                 :      +--------------------------------+ 
-                       | 22: eth2@if23 10.10.10.5/24                                                                                :         |17: eth0@if18  10.10.10.11
-                       |                                                                                                            :         |
-                       |                                                                                                            :         |
-                       | 23: veth0@if22                                                                                             :         |18: veth0@if17 
- ----------------------+-------------------------------- my-overlay-network 2: br0 10.10.10.1 (ns 1-ocerd3kl45) --------------------:------------------my-overlay-network 2: br0 10.10.10.1
-                                          |21: vxlan0                                                                               :               |16: vxlan
-                                          |                                                                                         :               |
-                                          |                                                                                         :               |
-                                          +-----------------------------------------------------------------------------------------:---------------+
+                         |                                                                                                          .           |
+                         |                                                                                                          .           | 
+                         |2: eno16777736 192.168.1.16                                                                               .           | 2: eno16777736 192.168.1.18 
+                   +------------------------+                                                                                       .       +-----------+   
+                   |  host-6 (ns default)   |                                                                                       .       |  host-7   | 
+                   +------------------------+                                                                                       .       +-----------+
+                                                                                                                                    .
+                                                                                                                                    . 
+                                                 |12: vxlan0                                                                        . 
+ ---------------+--------------------------------+--------+--------------- 2: br0 ingress (ns 1-j12a5pxum5 10.255.0.1/16)           .
+                |18: veth1@if17                           |14: veth0@if13                                                           .
+                |                                         |                                                                         .
+                |                                         |13: eth0@if14 10.255.0.2                                                 . 
+                |           +-----------------------------+---+                                                                     .    
+                |           | ingress-sbox (ns ingress_sbox)  |                                                                     .      
+                |           +---+-----------------------------+                                                                     .     
+                |               | 15: eth1@if16 172.18.0.2                                                                          .
+                |               |                                                                                                   .
+                |               |                                                                                                   .
+                |               | 16: veth812d9da@if15                                                                              . 
+                |            ---+--------------+--------------------------- 4: docker_gwbridge network (ns default 172.18.1.1/16)   .   ------+------ 3: docker_gwbridge network 172.18.0.1/16 
+                |                              |20: vethb08ef80@if19                                                                .         |20: veth0e0a2df@if19 
+                |                              |                                                                                    .         | 
+                |                              |                                                                                    .         | 
+                |                              |                                                                                    .         | 
+                |17: eth0@if18 10.255.0.5      |19: eth1@if20 172.18.0.3                                                            .         |19: eth1@if20 172.18.0.3 
+              +-+------------------------------+-+                                                                                  .      +--+-----------------------------+ 
+              |  nginx (ns d0914760c2fe)         |                                                                                  .      | node                           | 
+              +--------+-------------------------+                                                                                  .      +--+-----------------------------+ 
+                       | 22: eth2@if23 10.10.10.5                                                                                   .         |17: eth0@if18  10.10.10.11
+                       |                                                                                                            .         |
+                       |                                                                                                            .         |
+                       | 23: veth0@if22                                                                                             .         |18: veth0@if17 
+ ----------------------+-------------------------------- 2: br0 my-overlay-network (ns 1-ocerd3kl45 10.10.10.1/24)                  .  ------------------ 2: br0 my-overlay-network 10.10.10.1/24
+                                          |21: vxlan0                                                                               .     |16: vxlan
+                                          |                                                                                         .     |
+                                          |                                                                                         .     |
+                                          +-----------------------------------------------------------------------------------------------+
+                                                                                                                                    .
+                                                                                                                                    .
 ```
 
 
 # Packet routing
-- client send http requestt to advertise-addr 192.168.1.16:8080 
-- host nat iptable changes the destination to 172.18.0.2:8080
+- client sends http request to the advertise-addr and published port: 192.168.1.16:8080 
+- IP packeti is  received on eno16777736 interface on host-6
+- host NAT iptable DOCKER-INGRESS chain changes the IP header of any packets with destination port 8080 to destination IP address 172.18.0.2 port 8080
 ``` 
 [kenny@host-6 ~]$ sudo iptables -t nat -nvL
 ......
@@ -752,487 +756,79 @@ Chain DOCKER-INGRESS (2 references)
  pkts bytes target     prot opt in     out     source               destination
     0     0 DNAT       tcp  --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:8080 to:172.18.0.2:8080
 ```
-- The default routing table route to docker_gwbridge (in default namespace)
+- The routing table (in default namesapace) routes to the packet to docker_gwbridge interface (with detination address 172.18.0.2)
 ```
 [kenny@host-6 ~]$ ip route get 172.18.0.2
 172.18.0.2 dev docker_gwbridge src 172.18.0.1 
 ```
-- The packet arrives on interface 15: eth1@if16 172.18.0.2 of ingress-sbox container 
-- The POSTROUTING chain put the packets on 10.255.0.2, which is the eth0 (13) interface in ingress-sbox container.  
+- the docker_gwbridge linux bridge puts the packet on 16: veth812d9da@if15 interface
+- The packet arrives on the other end of veth pair 15: eth1@if16 172.18.0.2 of ingress-sbox container
+- For incoming packet (destined to the host), the iptables flow is 
+  - raw PREROUTING (empty in ingress_sbox) 
+  - mangle PREROUTING
+  - nat PREROUTING
+  - mangle INPUT 
+  - filter INPUT 
+  - Local processing
+- mangle PREROUTING marks any packet destined to port 8080 to flow 0x100.
 ```
-[kenny@host-6 ~]$ sudo ip netns exec ingress_sbox iptables -nvL -t nat
-Chain POSTROUTING (policy ACCEPT 0 packets, 0 bytes)
- pkts bytes target     prot opt in     out     source               destination
-    0     0 DOCKER_POSTROUTING  all  --  *      *       0.0.0.0/0            127.0.0.11
-    0     0 SNAT       all  --  *      *       0.0.0.0/0            10.255.0.0/16        ipvs to:10.255.0.2
 [kenny@host-6 ~]$ sudo ip netns exec ingress_sbox iptables -nvL -t mangle
 Chain PREROUTING (policy ACCEPT 0 packets, 0 bytes)
  pkts bytes target     prot opt in     out     source               destination
     0     0 MARK       tcp  --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:8080 MARK set 0x100
-Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
- pkts bytes target     prot opt in     out     source               destination
-    0     0 MARK       all  --  *      *       0.0.0.0/0            10.255.0.4           MARK set 0x100
 ```
-- The iptables rule marks the flow as 0x100 (256 decimal)
+- There are not other rules configured for incoming. So, the package is send to local processing (by IPVS).
+- ipvsadm changes the destination of flow 256 (0x100) to 10.255.0.5, i.e. the nginx
+```
 [kenny@host-6 ~]$ sudo ip netns exec ingress_sbox ipvsadm -ln
 IP Virtual Server version 1.2.1 (size=4096)
 Prot LocalAddress:Port Scheduler Flags
   -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
 FWM  256 rr
   -> 10.255.0.5:0                 Masq    1      0          0
-
 ```
-- ipvsadm says flow 256 (0x100) should be forward to 10.255.0.5:0
-```
-- The route table in ingress_sbox namespace forward the package to eth0@if14 10.255.0.2  which is connected to ingress network 
+- The locally generated packets (by IPVS) flow as following: 
+  - routing decision 
+  - raw OUTPUT
+  - mangle OUTPUT 
+  - nat OUTPUT
+  - routing decision
+  - filter OUTPUT
+  - mangle POSTROUTING
+  - nat POSTROUTING   
+  - goes out on the outgoing interface 
+- The routing table in ingress_sbox namespace route the packet to interface eth0.
 ```
 [kenny@host-6 ~]$ sudo ip netns exec ingress_sbox ip route get 10.255.0.5
-RTNETLINK answers: Invalid argument
 10.255.0.5 dev eth0 src 10.255.0.2 
-    cache 
-[kenny@host-6 ~]$ sudo ip netns exec d0914760c2fe ip route get 10.255.0.5
-RTNETLINK answers: Invalid argument
-local 10.255.0.5 dev lo src 10.255.0.5 
-```
-- The packet arrives on eth0@if18 10.255.0.5 interface of nginx
-- nginx consumes the IP package and handles the http request
-
-
-
-[kenny@host-6 ~]$ ip addr show
-16: veth812d9da@if15: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker_gwbridge state UP 
-[kenny@host-6 ~]$ brctl show
-bridge name     bridge id               STP enabled     interfaces
-docker0         8000.02420b94bfa9       no
-docker_gwbridge         8000.0242586d89e8       no              veth812d9da
-                                                        vethb08ef80
 ```
 
-So, on host_6, based on subnet, docker container 5f7a2fea6162,
-- eth0 is connected to ingress network (10.255.0.0/16)
-- eth1 is connected to docker_gwbridge newtork (172.18.0.0/16)
-- eth2 is connected to my-overlay-networ (10.10.10.0/24) 
+- The POSTROUTING chain put the packet on 10.255.0.2, which is the eth0 (device 13, with source IP 10.255.0.2) interface in ingress-sbox container.  
+
+- The mangle OUTPUT chain only has a rule for destination 10.255.0.4. Our destination is 10.255.0.5, so the following rule does not apply. 
+```
+[kenny@host-6 ~]$ sudo ip netns exec ingress_sbox iptables -nvL -t mangle
+Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination
+    0     0 MARK       all  --  *      *       0.0.0.0/0            10.255.0.4           MARK set 0x100
+```
+- The only rule applies is nat POSTROUTING chain the SNAT rule. It changes source from ipvs to 10.255.0.2.
+```
+[kenny@host-6 ~]$ sudo ip netns exec ingress_sbox iptables -nvL -t nat
+Chain POSTROUTING (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination
+    0     0 DOCKER_POSTROUTING  all  --  *      *       0.0.0.0/0            127.0.0.11
+    0     0 SNAT       all  --  *      *       0.0.0.0/0            10.255.0.0/16        ipvs to:10.255.0.2
+```
+
+- The package to eth0@if14 with source IP 10.255.0.2 and destination IP 10.255.0.5. The package goes on ingress network 
+- the br0 forward the packet to veth1@if17 (device 18) which is connected to veth eth0@if18 10.255.0.5 interface of nginx.
+- nginx application consumes the IP package and handles the http request
 
 
-Install brctl
+# Note on how to install brctl
 ```
 $ su -
 # yum install bridge-utils -y
 $ brctl show
-bridge name     bridge id               STP enabled     interfaces
-docker0         8000.024246405080       no
-docker_gwbridge         8000.0242ca818fd7       no              veth82b324b
-                                                        veth8894eae
 ```
-The linux bridge, docker_gwbridge, connects the 172.18.0.0/16 subnet 
-
-# Overlay
-The overlay networks creates a subnet that can connect containers across multiple hosts (in a swarm cluster). 
-
-On host-7,
-- eth0 connects to the ingress network (10.255.0.0/16), i.e. on the same subnet as eth0 on host-6 
-- eth2 connects to my-overlay-networ (10.10.10.0/24), i.e. on the same subnet as eth2 on host-6 
-```
-$ docker ps
-CONTAINER ID        IMAGE                       COMMAND                  CREATED             STATUS              PORTS               NAMES
-59dde88e52f3        akittana/dockerwebapp:1.1   "/usr/sbin/apache2ct…"   About an hour ago   Up About an hour    80/tcp              my-web.1.1f1o7k4i8qd5nwh6zgdf85n1t
-
-$ docker exec 59dde88e52f3 ip addr show
-76: eth0@if77: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default 
-    link/ether 02:42:0a:ff:00:1f brd ff:ff:ff:ff:ff:ff
-    inet 10.255.0.31/16 brd 10.255.255.255 scope global eth0
-       valid_lft forever preferred_lft forever
-78: eth1@if79: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
-    link/ether 02:42:ac:12:00:03 brd ff:ff:ff:ff:ff:ff
-    inet 172.18.0.3/16 brd 172.18.255.255 scope global eth1
-       valid_lft forever preferred_lft forever
-81: eth2@if82: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default 
-    link/ether 02:42:0a:0a:0a:1f brd ff:ff:ff:ff:ff:ff
-    inet 10.10.10.31/24 brd 10.10.10.255 scope global eth2
-       valid_lft forever preferred_lft forever
-
-$ ip addr show
-2: eno16777736: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
-    link/ether 00:0c:29:09:96:36 brd ff:ff:ff:ff:ff:ff
-    inet 10.238.74.112/23 brd 10.238.75.255 scope global dynamic eno16777736
-       valid_lft 151664sec preferred_lft 151664sec
-    inet6 fe80::20c:29ff:fe09:9636/64 scope link 
-       valid_lft forever preferred_lft forever
-3: docker_gwbridge: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP 
-    link/ether 02:42:53:4a:94:bb brd ff:ff:ff:ff:ff:ff
-    inet 172.18.0.1/16 brd 172.18.255.255 scope global docker_gwbridge
-       valid_lft forever preferred_lft forever
-    inet6 fe80::42:53ff:fe4a:94bb/64 scope link 
-       valid_lft forever preferred_lft forever
-4: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN 
-    link/ether 02:42:fc:96:58:fc brd ff:ff:ff:ff:ff:ff
-    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
-       valid_lft forever preferred_lft forever
-75: veth55e83ff@if74: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker_gwbridge state UP 
-    link/ether 42:05:db:5a:2e:b4 brd ff:ff:ff:ff:ff:ff link-netnsid 1
-    inet6 fe80::4005:dbff:fe5a:2eb4/64 scope link 
-       valid_lft forever preferred_lft forever
-79: vethbeedd1d@if78: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker_gwbridge state UP 
-    link/ether d2:7e:19:70:23:4d brd ff:ff:ff:ff:ff:ff link-netnsid 3
-    inet6 fe80::d07e:19ff:fe70:234d/64 scope link 
-       valid_lft forever preferred_lft forever
-```
-So, eth1 (ifindex 78) in container and vethbeedd1d@if78 (ifindex 79) on host is a pair, connecting container to docker_gwbridge  
-
-Similar to bridge networks, docker creates a bridge interface for each overlay network, which connect the virtual tunnel interfaces that make the vxlan tunnel connections between the hosts. However, these bridge and vxlan tunnel interfaces are not created directly on the tunnel host, but instead they are in separate containers that docker launches for each overlay network that is created.
-
-Both eth0@if77 and eth2@if82 in container are tunnelled through eno16777736 (vxlan tunnel) 
-On host-7, docker_gwbridge is the bridge interface. docker0 is unused docker bridge. veth55e83ff?  
-```
-$ docker exec 59dde88e52f3 ping 10.255.0.32
-PING 10.255.0.32 (10.255.0.32) 56(84) bytes of data.
-64 bytes from 10.255.0.32: icmp_seq=1 ttl=64 time=1.39 ms
-
-$ docker exec 59dde88e52f3 ping 10.10.10.32
-PING 10.10.10.32 (10.10.10.32) 56(84) bytes of data.
-64 bytes from 10.10.10.32: icmp_seq=1 ttl=64 time=0.839 ms
-
-```
-
-Docker’s overlay network uses vxlan technology which encapsulates layer 2 frames into layer 4 packets (UDP/IP). 
-This allows docker to create create virtual networks on top of existing connections between hosts that may or
-may not be in the same subnet. Any network endpoints participating in this virtual network, see each other as
-if they’re connected over a switch, without having to care about the underlying physical network. vxlan uses
-udp port 4789.
-
-icmp packet between 10.255.0.31 and 10.255.0.32 is tunnelled through 10.238.74.112.42022 and 10.238.74.108.4789 vxlan (layer 4) tunnel
-IP packets between 10.10.10.31 and 10.10.10.32 is tunnelled through 10.238.74.108.51995 and 10.238.74.112.4789 vxlan (layer 4) tunnel
-```
-$ sudo tcpdump -i eno16777736 -n udp and port 4789
-tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
-listening on eno16777736, link-type EN10MB (Ethernet), capture size 262144 bytes
-16:18:08.650919 IP 10.238.74.112.42022 > 10.238.74.108.4789: VXLAN, flags [I] (0x08), vni 4096
-IP 10.255.0.31 > 10.255.0.32: ICMP echo request, id 16, seq 398, length 64
-
-16:53:55.062742 IP 10.238.74.108.51995 > 10.238.74.112.4789: VXLAN, flags [I] (0x08), vni 4097
-IP 10.10.10.32 > 10.10.10.31: ICMP echo reply, id 22, seq 2185, length 64
-
-```
-Docker swarm creates 4 network namespaces
-```
-$ sudo ls /var/run/docker/netns
-1-nu90ifi429  1-vs3fqz7f7f  9d96585064fc  ingress_sbox
-```
-Create symbolics link to the docker netns directory will allow us see the namespaces iwth ip netns tool  
-```
-$ sudo ln -s /var/run/docker/netns /var/run/netns
-$ sudo ip netns
-9d96585064fc (id: 3)
-1-nu90ifi429 (id: 2)
-1-vs3fqz7f7f (id: 0)
-ingress_sbox (id: 1)
-
-```
-Guessing from similarity of IDs
-/var/run/docker/netns/1-nu90ifi429 must be for my-overlay-network
-/var/run/docker/netns/1-vs3fqz7f7f must be for ingress
-```
-$ docker network ls
-NETWORK ID          NAME                 DRIVER              SCOPE
-fd366a65bcf8        bridge               bridge              local
-5cf8c4af8fe0        docker_gwbridge      bridge              local
-6e337de971da        host                 host                local
-vs3fqz7f7fsx        ingress              overlay             swarm
-nu90ifi429x4        my-overlay-network   overlay             swarm
-383137c38d06        none                 null                local
-```
-By comparing interfaces, we can confirm 9d96585064fc network namespace is created by container process e7073fd5f371. 
-```
-docker ps
-CONTAINER ID        IMAGE                       COMMAND                  CREATED             STATUS              PORTS               NAMES
-e7073fd5f371        akittana/dockerwebapp:1.1   "/usr/sbin/apache2ct…"   About an hour ago   Up About an hour    80/tcp              my-web.2.opj5p85xwbj3ftohrkeolhoku
-$ docker exec e7073fd5f371 ip addr show
-83: eth0@if84: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default 
-    link/ether 02:42:0a:ff:00:24 brd ff:ff:ff:ff:ff:ff
-    inet 10.255.0.36/16 brd 10.255.255.255 scope global eth0
-       valid_lft forever preferred_lft forever
-85: eth1@if86: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
-    link/ether 02:42:ac:12:00:03 brd ff:ff:ff:ff:ff:ff
-    inet 172.18.0.3/16 brd 172.18.255.255 scope global eth1
-       valid_lft forever preferred_lft forever
-88: eth2@if89: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default 
-    link/ether 02:42:0a:0a:0a:24 brd ff:ff:ff:ff:ff:ff
-    inet 10.10.10.36/24 brd 10.10.10.255 scope global eth2
-       valid_lft forever preferred_lft forever
-$ sudo nsenter --net=/var/run/docker/netns/9d96585064fc ip addr show
-83: eth0@if84: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP 
-    link/ether 02:42:0a:ff:00:24 brd ff:ff:ff:ff:ff:ff link-netnsid 0
-    inet 10.255.0.36/16 brd 10.255.255.255 scope global eth0
-       valid_lft forever preferred_lft forever
-85: eth1@if86: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP 
-    link/ether 02:42:ac:12:00:03 brd ff:ff:ff:ff:ff:ff link-netnsid 1
-    inet 172.18.0.3/16 brd 172.18.255.255 scope global eth1
-       valid_lft forever preferred_lft forever
-88: eth2@if89: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP 
-    link/ether 02:42:0a:0a:0a:24 brd ff:ff:ff:ff:ff:ff link-netnsid 2
-    inet 10.10.10.36/24 brd 10.10.10.255 scope global eth2
-
-```
-Note that, `sudo ip netns exec 9d96585064fc ip addr show` does the same as nsenter used above.  
-
-Inspect my-overlay-network, it is 10.10.10.0/24 subnet with one container attached to it.  
-The container has an interface with IP address 10.10.10.36/24. If also has host interface 
-10.238.74.108 attached to it, and the peer endpoint of the vxlan tunnel is host interface  
-10.238.74.112 on host-7.
-$ docker network inspect my-overlay-network
-[
-    {
-        "Name": "my-overlay-network",
-        "Id": "nu90ifi429x4j624lanlhdnwc",
-            "Config": [
-                {
-                    "Subnet": "10.10.10.0/24",
-                    "Gateway": "10.10.10.1"
-                }
-        "Containers": {
-            "e7073fd5f371d1d0f1aa8a2230f74b711cd843dec684cae16949da3315ef3d5e": {
-                "Name": "my-web.2.opj5p85xwbj3ftohrkeolhoku",
-                "EndpointID": "5fc7ec4de02a922b55c7b37d1f11797c2f257791842d230f0790a6303dafafb8",
-                "MacAddress": "02:42:0a:0a:0a:24",
-                "IPv4Address": "10.10.10.36/24",
-        "Options": {
-            "com.docker.network.driver.overlay.vxlanid_list": "4097"
-        },
-        "Labels": {},
-        "Peers": [
-            {
-                "Name": "6a411c148fab",
-                "IP": "10.238.74.112"
-            },
-            {
-                "Name": "5134efb03946",
-                "IP": "10.238.74.108"
-            }
-$ docker exec e7073fd5f371d1d0f1aa8a2230f74b711cd843dec684cae16949da3315ef3d5e ip addr show
-88: eth2@if89: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default 
-    link/ether 02:42:0a:0a:0a:24 brd ff:ff:ff:ff:ff:ff
-    inet 10.10.10.36/24 brd 10.10.10.255 scope global eth2
-[host-6 run]$ ip addr show
-3: ens37: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
-    link/ether 00:0c:29:a1:0e:a8 brd ff:ff:ff:ff:ff:ff
-    inet 10.238.74.108/23 brd 10.238.75.255 scope global dynamic ens37
-       valid_lft 141004sec preferred_lft 141004sec
-    inet6 fe80::15a9:3cab:80a7:57dd/64 scope link 
-       valid_lft forever preferred_lft forever
-[host-7 ~]$ ip addr show
-2: eno16777736: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
-    link/ether 00:0c:29:09:96:36 brd ff:ff:ff:ff:ff:ff
-    inet 10.238.74.112/23 brd 10.238.75.255 scope global dynamic eno16777736
-
-```
-Look inside my-overlay-network network namespace, it has
-- bridge inteface br0 (10.10.10.1)
-- the peer end of veth pair: and eth2@if89 and veth0@if88
-- vxlan0 interface
-```
-$ sudo nsenter --net=//var/run/docker/netns/1-nu90ifi429 ip addr show
-1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
-    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
-    inet 127.0.0.1/8 scope host lo
-       valid_lft forever preferred_lft forever
-2: br0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP 
-    link/ether 16:10:a2:63:3d:2a brd ff:ff:ff:ff:ff:ff
-    inet 10.10.10.1/24 brd 10.10.10.255 scope global br0
-       valid_lft forever preferred_lft forever
-87: vxlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master br0 state UNKNOWN 
-    link/ether 16:10:a2:63:3d:2a brd ff:ff:ff:ff:ff:ff link-netnsid 0
-89: veth0@if88: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master br0 state UP 
-    link/ether b2:96:6b:c5:f0:89 brd ff:ff:ff:ff:ff:ff link-netnsid 1
-$ docker ps
-CONTAINER ID        IMAGE                       COMMAND                  CREATED             STATUS              PORTS               NAMES
-e7073fd5f371        akittana/dockerwebapp:1.1   "/usr/sbin/apache2ct…"   About an hour ago   Up About an hour    80/tcp              my-web.2.opj5p85xwbj3ftohrkeolhoku
-$ docker exec e7073fd5f371 ip addr
-88: eth2@if89: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default 
-    link/ether 02:42:0a:0a:0a:24 brd ff:ff:ff:ff:ff:ff
-    inet 10.10.10.36/24 brd 10.10.10.255 scope global eth2
-       valid_lft forever preferred_lft forever
-
-```
-Look at the forwarding table and port of br0 inside my-overlay-network network namespace, it has
-vxlan0, vxlan0 dst 10.238.74.112, veth0 attached to it.  
-```
-$ sudo nsenter --net=/var/run/docker/netns/1-nu90ifi429 bridge show
-Object "show" is unknown, try "bridge help".
-[kenny@host-6 run]$ sudo nsenter --net=/var/run/docker/netns/1-nu90ifi429 bridge fdb show
-33:33:00:00:00:01 dev br0 self permanent
-01:00:5e:00:00:01 dev br0 self permanent
-16:10:a2:63:3d:2a dev vxlan0 master br0 permanent
-02:42:0a:0a:0a:23 dev vxlan0 dst 10.238.74.112 link-netnsid 0 self permanent
-b2:96:6b:c5:f0:89 dev veth0 master br0 permanent
-33:33:00:00:00:01 dev veth0 self permanent
-01:00:5e:00:00:01 dev veth0 self permanent
-$ sudo nsenter --net=/var/run/docker/netns/1-nu90ifi429 bridge link show
-87: vxlan0 state UNKNOWN : <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master br0 state forwarding priority 32 cost 100 
-89: veth0 state UP @(null): <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master br0 state forwarding priority 32 cost 2 
-
-```
-Capture traffic on veth0
-```
-$ docker exec -it e7073fd5f371 sh
-# ping 10.10.10.35
-sudo nsenter --net=/var/run/docker/netns/1-nu90ifi429 tcpdump -i veth0 icmp
-tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
-listening on veth0, link-type EN10MB (Ethernet), capture size 262144 bytes
-16:50:20.858902 IP 10.10.10.36 > 10.10.10.35: ICMP echo request, id 41, seq 1, length 64
-16:50:20.859514 IP 10.10.10.35 > 10.10.10.36: ICMP echo reply, id 41, seq 1, length 64
-$ sudo nsenter --net=/var/run/docker/netns/1-nu90ifi429 tcpdump -i vxlan0 icmp
-listening on vxlan0, link-type EN10MB (Ethernet), capture size 262144 bytes
-18:00:03.787350 IP 10.10.10.36 > 10.10.10.35: ICMP echo request, id 42, seq 1, length 64
-18:00:03.787810 IP 10.10.10.35 > 10.10.10.36: ICMP echo reply, id 42, seq 1, length 64
-$ sudo tcpdump -i ens37 -n udp and port 4789
-tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
-listening on ens37, link-type EN10MB (Ethernet), capture size 262144 bytes
-18:09:30.778708 IP 10.238.74.108.52903 > 10.238.74.112.4789: VXLAN, flags [I] (0x08), vni 4097
-IP 10.10.10.36 > 10.10.10.35: ICMP echo request, id 47, seq 1, length 64
-18:09:30.779086 IP 10.238.74.112.42302 > 10.238.74.108.4789: VXLAN, flags [I] (0x08), vni 4097
-IP 10.10.10.35 > 10.10.10.36: ICMP echo reply, id 47, seq 1, length 64
-[host-6]$ ip addr show
-3: ens37: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
-    link/ether 00:0c:29:a1:0e:a8 brd ff:ff:ff:ff:ff:ff
-    inet 10.238.74.108/23 brd 10.238.75.255 scope global dynamic ens37
-[host-7 ~]$ ip addr show
-2: eno16777736: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
-    link/ether 00:0c:29:09:96:36 brd ff:ff:ff:ff:ff:ff
-    inet 10.238.74.112/23 brd 10.238.75.255 scope global dynamic eno16777736
-[kenny@host-6 run]$ ip route get 10.238.74.112
-10.238.74.112 dev ens37 src 10.238.74.108 
-[kenny@host-6 run]$ sudo nsenter --net=/var/run/docker/netns/1-nu90ifi429 ip route get 10.10.10.35
-10.10.10.35 dev br0 src 10.10.10.1 
-    cache 
-[kenny@host-6 run]$ sudo nsenter --net=/var/run/docker/netns/1-nu90ifi429 ip route get 10.10.10.36
-10.10.10.36 dev br0 src 10.10.10.1 
-    cache 
-```
-So, below is the packet flow on the docker overlay network on host-6:
-
-- In my-web container, e7073fd5f371, icmp packet leaves veth interface  eth2@if89 
-- The packet reaches the other end of the veth pair, veth0@if88, in network namespace /var/run/docker/netns/1-nu90ifi429. veth0@if88 is attached to bridge br0 in the same namespace.    
-- After layer 4 encapsulation (vxlan tunnel between 10.238.74.108.52903 and 10.238.74.112.4789 ), the br0 bridge forwards the packet to vxlan0 interface, in the same network namespace. 
-- The routing table route the packet to ens37 interface
-- The packet goes out from ens37 interface on the host-6 to eno16777736 interface on host-7      
-
-# ingress
-The second network that the containers where connected to was the ingress network. Ingress is an overlay network but it is installed by default once a swarm cluster is initiated. This network is used to provide connectivity when connections are made to containers from the outside world. It is also where the load balancing feature provided by the swarm cluster happens.
-
-The load balancing is handling by IPVS which runs on a container that docker swarm launches by default. We can see this container attached to the ingress network.
-
-Note below, there is an ingress-sbox container connect to ingress network, in addition to my-web container  
-```
-$ docker network inspect ingress
-[
-        "Name": "ingress",
-        "Id": "vs3fqz7f7fsx1h8vv2crpvyr3",
-        "Scope": "swarm",
-        "Driver": "overlay",
-            "Config": [
-                {
-                    "Subnet": "10.255.0.0/16",
-                    "Gateway": "10.255.0.1"
-                }
-        "Containers": {
-            "e7073fd5f371d1d0f1aa8a2230f74b711cd843dec684cae16949da3315ef3d5e": {
-                "Name": "my-web.2.opj5p85xwbj3ftohrkeolhoku",
-                "EndpointID": "e2ef491341b94feddb5103e3b1be969246c3a64b4a0baa15bbf5b0ebc4fbb499",
-                "MacAddress": "02:42:0a:ff:00:24",
-                "IPv4Address": "10.255.0.36/16",
-            "ingress-sbox": {
-                "Name": "ingress-endpoint",
-                "EndpointID": "23e9543cf902033acaf8ba90a4beb4e3f328151b58a5103834939bb7d648a2e1",
-                "MacAddress": "02:42:0a:ff:00:02",
-                "IPv4Address": "10.255.0.2/16",
-                "IPv6Address": ""
-            }
-        "Options": {
-            "com.docker.network.driver.overlay.vxlanid_list": "4096"
-        },
-        "Labels": {},
-        "Peers": [
-            {
-                "Name": "5134efb03946",
-                "IP": "10.238.74.108"
-            },
-            {
-                "Name": "6a411c148fab",
-                "IP": "10.238.74.112"
-            }
-```
-The DNAT rule matches traffic destined to port 8080 and forwards it to 172.18.0.2:8080 
-```
-$ sudo iptables -t nat -n -L
-Chain PREROUTING (policy ACCEPT)
-target     prot opt source               destination         
-DOCKER-INGRESS  all  --  0.0.0.0/0            0.0.0.0/0            ADDRTYPE match dst-type LOCAL
-DOCKER     all  --  0.0.0.0/0            0.0.0.0/0            ADDRTYPE match dst-type LOCAL
-
-Chain INPUT (policy ACCEPT)
-target     prot opt source               destination         
-
-Chain OUTPUT (policy ACCEPT)
-target     prot opt source               destination         
-DOCKER-INGRESS  all  --  0.0.0.0/0            0.0.0.0/0            ADDRTYPE match dst-type LOCAL
-DOCKER     all  --  0.0.0.0/0           !127.0.0.0/8          ADDRTYPE match dst-type LOCAL
-
-Chain POSTROUTING (policy ACCEPT)
-target     prot opt source               destination         
-MASQUERADE  all  --  172.17.0.0/16        0.0.0.0/0           
-MASQUERADE  all  --  0.0.0.0/0            0.0.0.0/0            ADDRTYPE match src-type LOCAL
-MASQUERADE  all  --  172.18.0.0/16        0.0.0.0/0           
-
-Chain DOCKER (2 references)
-target     prot opt source               destination         
-RETURN     all  --  0.0.0.0/0            0.0.0.0/0           
-RETURN     all  --  0.0.0.0/0            0.0.0.0/0           
-
-Chain DOCKER-INGRESS (2 references)
-target     prot opt source               destination         
-DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:8080 to:172.18.0.2:8080
-RETURN     all  --  0.0.0.0/0            0.0.0.0/0           
-```
-Look into ingress_sbox container
-```
-[kenny@host-6 run]$ sudo ls /var/run/docker/netns
-1-nu90ifi429  1-vs3fqz7f7f  9d96585064fc  ingress_sbox
-[kenny@host-6 run]$ sudo nsenter --net=/run/docker/netns/ingress_sbox ip addr show
-79: eth0@if80: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP 
-    link/ether 02:42:0a:ff:00:02 brd ff:ff:ff:ff:ff:ff link-netnsid 0
-    inet 10.255.0.2/16 brd 10.255.255.255 scope global eth0
-       valid_lft forever preferred_lft forever
-81: eth1@if82: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP 
-    link/ether 02:42:ac:12:00:02 brd ff:ff:ff:ff:ff:ff link-netnsid 1
-    inet 172.18.0.2/16 brd 172.18.255.255 scope global eth1
-```
-docker then uses iptables mangle rules to mark packets to port 8080 with a certain number, that will then be used by IPVS to load balance to the appropriate containers:
-```
-[kenny@host-6 run]$ sudo nsenter --net=/var/run/docker/netns/ingress_sbox iptables -t mangle -L -n
-Chain PREROUTING (policy ACCEPT)
-target     prot opt source               destination         
-MARK       tcp  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:8080 MARK set 0x108
-
-Chain INPUT (policy ACCEPT)
-target     prot opt source               destination         
-
-Chain FORWARD (policy ACCEPT)
-target     prot opt source               destination         
-
-Chain OUTPUT (policy ACCEPT)
-target     prot opt source               destination         
-MARK       all  --  0.0.0.0/0            10.255.0.34          MARK set 0x108
-
-Chain POSTROUTING (policy ACCEPT)
-target     prot opt source               destination         
-
-```
-
-# docker_gwbridge
-Finally, there is the docker_gwbridge network. This is a bridge network and has a corresponding interface with the name docker_gwbridge created on each host participating in the swarm cluster. The docker_gwbridge provides connectivity to the outside world for traffic originating on the containers in the swarm cluster (For example, if we do a ping to google, that traffic goes through the docker_gwbridge network).
-
-
-# Summary
-When launching a container in a swarm cluster, the container can be attached to three (or more) networks by default. First there is the docker_gwbridge network which is used to allow containers to communicate with the outside world, then the ingress network which is only used if the containers need to allow inbound connections from the outside world, and finally there are the overlay networks that are user created and can be attached to containers. The overlay networks serve as a shared subnet between containers launched into the same network in which they can communicate directly (even if they are launched on different physical hosts).
-
-We also saw that there separate network spaces that are created by default by docker in a swarm cluster that help manage the vxlan tunnels used for the overlay networks, as well as the load balancing rules for inbound connections to containers.
