@@ -1,5 +1,6 @@
 # Reference
 [Overview](https://www.thegeekstuff.com/2008/11/overview-of-ramfs-and-tmpfs-on-linux/)
+https://www.kernel.org/doc/Documentation/filesystems/ramfs-rootfs-initramfs.txt
 
 # Examples
 ```
