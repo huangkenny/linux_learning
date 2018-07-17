@@ -1,0 +1,6 @@
+*.rpm
+a.out
+namespaces/userns_child_exec
+nspawn/centos_chroot/
+*.o
+*.ko

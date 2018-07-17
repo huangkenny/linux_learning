@@ -12,3 +12,6 @@
 # iproute2
 [iproute2 overview](http://www.enterprisenetworkingplanet.com/netos/article.php/10951_3510966_2/Take-Linux-Routing-to-the-Next-Level-with-iproute2.htm)
 [Advanced Routing](http://lartc.org/lartc.html) 
+
+# Macvlan and IPvlan basic
+https://sreeninet.wordpress.com/2016/05/29/macvlan-and-ipvlan/

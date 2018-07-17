@@ -1,0 +1,1 @@
+cmd_/home/kenny/linux/kernel/chardev/chardev.ko := ld -r -m elf_x86_64 -T ./scripts/module-common.lds --build-id  -o /home/kenny/linux/kernel/chardev/chardev.ko /home/kenny/linux/kernel/chardev/chardev.o /home/kenny/linux/kernel/chardev/chardev.mod.o ;  true

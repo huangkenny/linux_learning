@@ -1,0 +1,1 @@
+cmd_/home/kenny/linux/kernel/block_device/brd/my_brd.ko := ld -r -m elf_x86_64 -T ./scripts/module-common.lds --build-id  -o /home/kenny/linux/kernel/block_device/brd/my_brd.ko /home/kenny/linux/kernel/block_device/brd/my_brd.o /home/kenny/linux/kernel/block_device/brd/my_brd.mod.o ;  true

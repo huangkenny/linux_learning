@@ -1,0 +1,100 @@
+A block layer introduction part 1: the bio layer
+https://lwn.net/Articles/736534/
+
+# Above block layer
+block special device /dev/xyz
+- map to S_IFBLK inodes in kernel
+
+inode
+- i_bdev points to a struct block_device thats represents a target device 
+
+block_device
+ - block_device->bd_inode reference to a 2nd inode
+   - the 2nd inode provide page cache
+ - block deivce can have at most one "holder"
+   - holder is specified using  blkdev_get() 
+ - primary interface involves sending read, write or control requests. This interface is provided by the bio layer. 
+
+# The bio layer 
+ - All block devices in Linux are represented by struct gendisk (generic disk)
+   struct block_device {
+   ......
+   struct gendisk *	bd_disk;
+   ......
+   }
+
+gendisk
+  - Largely serves as a link between the filesystem interface "above" and the lower-layer interface "below"
+  - Above the gendisk is one or more struct block_device structures, which are linked from inodes in /dev 
+  - A gendisk can be associated with multiple block_device structures when it has a partition table. 
+    There will be one block_device that represents the whole gendisk, and possibly some others that
+    represent partitions within the gendisk.
+ 
+bio
+  - a data structure (struct bio) that carries read, write and control requests, from the block_device, 
+    past the gendisk, and on to the driver.   
+  - A bio identifies a target device (and partition number) 
+    struct gendisk		*bi_disk;
+    Can be set by bio_set_dev()
+  - an offset in the linear address space of the device 
+  - a request (typically READ or WRITE)
+  - a size, and some memory where data will be copied to or from  
+
+  - Once constructed, a bio is given to the bio layer by calling generic_make_request() or equivalently, submit_bio()
+  - generic_make_request() merely queues the bio for subsequent handling
+   
+Interface between bio layer and request layer
+  - devices register with the bio layer by calling blk_queue_make_request() and passing a make_request_fn() function
+    that takes a bio
+  - generic_make_request() will call the make_request_fn() function for the device identified in the bio.
+  - When the I/O request described by the bio completes, the bi_status field is set to indicate success
+    or failure and call bio_endio() which, in turn, will call the bi_end_io() function stored in the bio structure.
+
+Stack block devices
+  - It is quite possible for the use of virtual block devices such as "md" (software RAID) and "dm" 
+   (used, for example, by LVM2) to result in a stack of block devices, each of which modifies a bio and
+   sends it on to the next device in the stack. 
+  - Simple recursion
+     generic_make_request(struct bio *bio) 
+     {    
+       // Target device (gendisk) is pointed by bio->bi_bdev. 
+       // Get the target device request queue (supplied by the request layer to bio layer during device registration 
+       struct request_queue *q = bdev_get_queue(bio->bi_bdev); 
+       // Call the device's make_request_fn of the target device 
+       // The make_request_fn() of the target device changes the target device of the bio to the next block device  
+       // down the stack and call generic_make_request(bio).  
+       // This results in generic_make_request() being called recursively. 
+       q->make_request_fn(q, bio);
+     }
+  - Recursion avoidance 
+    Instead of recursively call generic_make_request(), generic_make_request() detects when it is being called
+    recursively and does not pass the bio down to the next layer. Instead it queues the bio internally (using 
+    current->bio_list in the struct task_struct for the current process) and submits it only after the parent
+    bio submission completes. 
+    
+Device queue plugging
+  - Originally, plugging applied only to an empty queue. Before submitting a request to an empty queue, 
+    the queue would be plugged so that no requests could flow through to the underlying device for a while. 
+    Bios submitted by the filesystem could then queue up and allow batches to be identified. 
+    The queue would be unplugged explicitly by the filesystem requesting it, or implicitly after a short timeout. 
+    It is hoped that by this time some suitable batches would have been found and that the small delay in
+    starting work is more than compensated for by the larger batches that are ultimately submitted.
+    Since Linux 2.6.39 a new plugging mechanism has been in place that works on a per-process basis rather
+    than per-device. This scales better on multi-CPU machines. 
+  - When a filesystem or other client of a block device submits requests it will normally bracket a
+    collection of generic_make_request() calls with blk_start_plug() and blk_finish_plug().
+
+Block layer introduction part 2: the request layer: https://lwn.net/Articles/738449/ 
+- At request layer, request_queue corresponds to the gendisk at the bio layer. It represents a particular device.
+- request_queue is allocated for every gendisk
+- Not all block device use the request layer
+- The request layer is externally visiable through the contents of /sys/block/*/queue/ sysfs directory.
+- The request structure corresponds to bio at the bio layer. It represents an I/O request.
+- request contains a list of one or more bios that must represent contiguous I/O operations
+- When a request structure is allocated, some extra space is allocated at the end to be used by the underlying
+  driver to store any additional per-request information. This space is sometimes used to store the command
+  header that is sent to the underlying devices, such as a SCSI command descriptor block, but drivers are free
+  to use it however they wish.
+- These requests are created by the appropriate make_request_fn() function (blk_queue_bio() for single-queue
+  or blk_mq_make_request() for multi-queue) and handed to an I/O scheduler or "elevator".
+
